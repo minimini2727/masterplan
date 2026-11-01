@@ -42,6 +42,16 @@ description: 퍼포먼스 마케팅 팀(6명 서브에이전트)을 순서대로
 
 독립적인 작업은 병렬로 돌려도 된다 (예: 소재 제작 중 리서처의 추가 조사).
 
+## 산출물 내보내기 (필수, 매번)
+사용자 요청: **전략서는 PDF(페이퍼로지 폰트), 미디어 믹스는 엑셀**로 항상 전달한다. 파일은 `outputs/<프로젝트>/export/`에 만든다.
+1. 전략서 PDF: 전략서가 완료(또는 수정)되면
+   `python3 team/tools/md_to_pdf.py outputs/<프로젝트>/02_strategy.md "outputs/<프로젝트>/export/02_전략서_<프로젝트>.pdf" "<문서 제목>"`
+   - 폰트는 `team/assets/fonts/Paperlogy-*.woff2`를 쓴다. `pdffonts`로 Paperlogy가 포함됐는지 확인한다.
+2. 미디어 믹스 엑셀: 미디어 믹스가 완료(또는 수정)되면
+   `python3 team/tools/media_mix_to_xlsx.py outputs/<프로젝트> "outputs/<프로젝트>/export/03_미디어믹스_<프로젝트>.xlsx" <객단가>`
+   - 이어서 xlsx 스킬의 `recalc.py`로 재계산하고 `errors_found`가 없는지 확인한다.
+3. 두 파일을 SendUserFile로 사용자에게 보낸다. 최종 검수 후 수정이 생기면 다시 만들어 다시 보낸다.
+
 ## 마무리 보고 (사용자에게)
 - 최종 KPI와 기본 시나리오 예산·예상 성과 범위
 - 매체별 예산 요약 표
