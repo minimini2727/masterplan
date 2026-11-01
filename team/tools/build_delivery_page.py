@@ -42,7 +42,13 @@ def main():
         dl_cards.append(
             f'<li class="dl"><span class="ext">{k}</span><div class="dl-body"><strong>{esc(label)}</strong>'
             f'<span class="fname">{esc(p.name)}</span></div><span class="size">{size_s}</span>'
-            f'<button type="button" class="btn" data-file="{esc(p.name)}">받기</button></li>')
+            + (f'<button type="button" class="btn" data-file="{esc(p.name)}">받기</button></li>' if p.suffix == ".pdf" else
+               f'<button type="button" class="btn" data-file="{esc(p.name)}" data-b64="b64/{esc(p.stem)}.txt">받기</button></li>'))
+        if p.suffix != ".pdf":
+            # xlsx·zip은 Artifact에 직접 첨부할 수 없어 base64 텍스트로 올리고 페이지에서 복원해 저장한다.
+            import base64
+            (exp / "b64").mkdir(exist_ok=True)
+            (exp / "b64" / f"{p.stem}.txt").write_text(base64.b64encode(p.read_bytes()).decode(), encoding="ascii")
 
     sections = []
     used = set()
@@ -202,9 +208,20 @@ footer a {{ color:var(--accent); }}
     b.disabled = true;
     say(name + ' 준비 중…');
     try {{
-      var res = await fetch(path);
-      if (!res.ok) throw new Error('fetch');
-      var blob = await res.blob();
+      var b64 = b.getAttribute('data-b64');
+      var blob;
+      if (b64) {{
+        var r = await fetch(b64);
+        if (!r.ok) throw new Error('fetch');
+        var bin = atob((await r.text()).trim());
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        blob = new Blob([bytes]);
+      }} else {{
+        var res = await fetch(path);
+        if (!res.ok) throw new Error('fetch');
+        blob = await res.blob();
+      }}
       await dl.save({{ filename: name, data: blob }});
       say(name + ' 저장을 요청했습니다.');
     }} catch (err) {{

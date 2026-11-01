@@ -53,7 +53,10 @@ description: 퍼포먼스 마케팅 팀(6명 서브에이전트)을 순서대로
 3. 소재 PNG: 4번 제작자는 모든 소재 ID마다 `05_creatives/banner/<ID>.html`(실제 사양 크기, 폰트 'Paperlogy', 외부 리소스 없음)을 만든다. 리드는
    `node team/tools/html_to_png.js outputs/<프로젝트>/05_creatives/banner outputs/<프로젝트>/export/creatives_png`
    로 PNG를 만들고 몇 장을 열어 확인한 뒤 zip으로 묶는다.
-4. 위 파일들을 SendUserFile로 사용자에게 보낸다. 최종 검수 후 수정이 생기면 다시 만들어 다시 보낸다.
+4. 결과물 링크(마지막에 항상): 페이지 설정 json(제목, 요약 KPI, 매체 표, 검수 판정, 런칭 전 확인 사항, 저장소 URL)을 만들고
+   `python3 team/tools/build_delivery_page.py outputs/<프로젝트> <설정.json>` → `export/index.html`.
+   Artifact로 publish한다(`root`=export 폴더, `files`=PDF·`b64/*.txt`·`creatives_png/*.png`, `capabilities: {downloads: true}`). xlsx·zip은 Artifact에 직접 못 올리므로 b64 텍스트로 올리고 페이지가 원래 파일로 복원해 저장한다. 링크를 최종 보고 맨 끝에 준다.
+5. 위 파일들을 SendUserFile로 사용자에게 보낸다. 최종 검수 후 수정이 생기면 다시 만들어 다시 보낸다.
 
 ## 마무리 보고 (사용자에게)
 - 최종 KPI와 기본 시나리오 예산·예상 성과 범위
