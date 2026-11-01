@@ -50,7 +50,10 @@ description: 퍼포먼스 마케팅 팀(6명 서브에이전트)을 순서대로
 2. 미디어 믹스 엑셀: 미디어 믹스가 완료(또는 수정)되면
    `python3 team/tools/media_mix_to_xlsx.py outputs/<프로젝트> "outputs/<프로젝트>/export/03_미디어믹스_<프로젝트>.xlsx" <객단가>`
    - 이어서 xlsx 스킬의 `recalc.py`로 재계산하고 `errors_found`가 없는지 확인한다.
-3. 두 파일을 SendUserFile로 사용자에게 보낸다. 최종 검수 후 수정이 생기면 다시 만들어 다시 보낸다.
+3. 소재 PNG: 4번 제작자는 모든 소재 ID마다 `05_creatives/banner/<ID>.html`(실제 사양 크기, 폰트 'Paperlogy', 외부 리소스 없음)을 만든다. 리드는
+   `node team/tools/html_to_png.js outputs/<프로젝트>/05_creatives/banner outputs/<프로젝트>/export/creatives_png`
+   로 PNG를 만들고 몇 장을 열어 확인한 뒤 zip으로 묶는다.
+4. 위 파일들을 SendUserFile로 사용자에게 보낸다. 최종 검수 후 수정이 생기면 다시 만들어 다시 보낸다.
 
 ## 마무리 보고 (사용자에게)
 - 최종 KPI와 기본 시나리오 예산·예상 성과 범위
