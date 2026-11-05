@@ -38,6 +38,9 @@ description: 퍼포먼스 마케팅 팀(6명 서브에이전트)을 순서대로
 6. **pm-creative-planner** → 소재 기획서.
 7. **pm-creative-producer** → 제작물. 소재가 많으면 우선순위 높은 것부터 만들게 한다.
    - 제작자가 `imagegen/*.json`을 쓰면 리드가 `python3 team/tools/gen_images.py outputs/<프로젝트>`로 gpt-image-2 실제 이미지를 만든다 (필요: `OPENAI_API_KEY`, 허용 도메인 `api.openai.com`). 먼저 우선순위 소재 2~3개로 시험 생성하고 PNG를 열어 확인한 뒤 나머지를 만든다.
+   - **제품 누끼:** 제품 사진은 ① 사용자가 준 사진(`05_creatives/ref/source/`) ② 브랜드 공식몰·공식 보도자료 이미지 순으로 구한다. 아무 소매몰·블로그 이미지는 쓰지 않는다. 받은 파일은 새 빈 폴더에 두고 출처 URL과 받은 날짜를 `ref/SOURCES.md`에 적는다.
+     `python3 -I team/tools/cutout.py <원본> outputs/<프로젝트>/05_creatives/ref/product_cutout.png` → `python3 team/tools/place_product.py outputs/<프로젝트>/05_creatives/banner outputs/<프로젝트>/05_creatives/ref/product_cutout.png` → PNG 다시 추출.
+     누끼 결과는 PNG를 열어 가장자리·잘린 부분을 확인한다. 공식 원본이 아닌 이미지는 '시안용, 집행 전 브랜드 원본으로 교체'로 표시한다.
    - 키나 네트워크가 없으면 이미지 없이 시안을 만들고, 사용자에게 무엇이 막혔는지 알린다. 가짜 이미지로 채우지 않는다.
 8. **최종 검수** pm-qa-reviewer에게 전체 검수를 시킨다.
 9. 판정이 `반려`이거나 `치명`/`중요` 이슈가 있으면 담당 팀원에게 이슈 ID를 넘겨 수정시키고, 검수자에게 재검수시킨다. **수정-재검수는 최대 2회**까지 하고, 남은 이슈는 사용자에게 그대로 보고한다.
