@@ -216,6 +216,34 @@
     .editor-head{ padding:16px 18px; }
     .editor-tabs{ padding:0 18px; }
   }
+  /* ---- Meta 대용량 셋팅 ---- */
+  .meta-section{ margin-bottom:26px; }
+  .meta-section .section-title{ font-size:14px; }
+  .meta-run-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .meta-card{ border:1px solid var(--border); border-radius:var(--radius-md); padding:16px; background:var(--surface); min-width:0; }
+  .meta-card-title{ font-size:13.5px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+  .meta-card-desc{ font-size:11.5px; color:var(--ink-soft); margin:0 0 12px; }
+  .tag{ display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--surface-alt); color:var(--ink-soft); white-space:nowrap; }
+  .tag-ok{ background:var(--green-soft); color:var(--green); }
+  .tag-err{ background:var(--red-soft); color:var(--red); }
+  .issue-list{ list-style:none; margin:0; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-sm); max-height:200px; overflow-y:auto; font-size:11.5px; }
+  .issue-list li{ padding:3px 0; }
+  .issue-list li.is-err{ color:var(--red); }
+  .issue-list li.is-warn{ color:var(--amber); }
+  .ok-note{ color:var(--green); font-weight:600; font-size:12.5px; margin:0; }
+  .progress-row{ display:flex; align-items:center; gap:10px; margin-top:16px; font-size:11.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+  .progress-track{ flex:1; height:8px; background:var(--surface-alt); border-radius:4px; overflow:hidden; }
+  .progress-fill{ height:100%; background:var(--blue); transition:width .2s; }
+  .meta-log{ margin-top:10px; height:200px; overflow-y:auto; background:var(--surface-alt); border-radius:var(--radius-sm); padding:10px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; line-height:1.6; }
+  .meta-log:empty::before{ content:"실행 로그가 여기에 표시돼요"; color:var(--ink-faint); }
+  .log-line{ white-space:pre-wrap; word-break:break-all; }
+  .log-line.is-ok{ color:var(--green); }
+  .log-line.is-err{ color:var(--red); font-weight:600; }
+  .log-line.is-warn{ color:var(--amber); }
+  .log-line.is-dry{ color:var(--ink-soft); }
+  .meta-toast{ position:sticky; top:0; z-index:2; background:var(--ink); color:var(--bg); padding:10px 14px; border-radius:var(--radius-sm); font-size:12px; margin-bottom:12px; }
+  .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+  @media (max-width:760px){ .meta-run-grid{ grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -324,7 +352,7 @@
     idbOpen().then(function(db){
       try{
         var tx=db.transaction(STORE,"readwrite");
-        tx.objectStore(STORE).put({ years:state.years, order:state.order }, KEY);
+        tx.objectStore(STORE).put({ years:state.years, order:state.order, metaConfig:state.metaConfig }, KEY);
       }catch(e){}
     }).catch(function(){});
   }
@@ -461,7 +489,8 @@
     {id:"overview", label:"전략 현황"},
     {id:"files", label:"참고자료"},
     {id:"report", label:"성과 리포트"},
-    {id:"creative", label:"광고 소재"}
+    {id:"creative", label:"광고 소재"},
+    {id:"meta", label:"Meta 대용량 셋팅"}
   ];
   function renderEditorTabs(){
     var html = EDITOR_TABS.map(function(t){
@@ -479,6 +508,7 @@
     else if(editorState.tab==="files") body.innerHTML = filesTabHTML(m);
     else if(editorState.tab==="report") body.innerHTML = reportTabHTML(m);
     else if(editorState.tab==="creative") body.innerHTML = creativeTabHTML(m);
+    else if(editorState.tab==="meta") body.innerHTML = metaTabHTML(m);
   }
 
   function overviewTabHTML(m){
@@ -957,10 +987,645 @@
     }
   });
 
+  /* ============================= Meta 대용량 셋팅 ============================= */
+  var META_OBJECTIVES = {
+    OUTCOME_AWARENESS:{label:"인지도", opt:"REACH", needsPixel:false},
+    OUTCOME_TRAFFIC:{label:"트래픽", opt:"LINK_CLICKS", needsPixel:false},
+    OUTCOME_ENGAGEMENT:{label:"참여", opt:"POST_ENGAGEMENT", needsPixel:false},
+    OUTCOME_LEADS:{label:"잠재고객", opt:"OFFSITE_CONVERSIONS", needsPixel:true, event:"LEAD"},
+    OUTCOME_SALES:{label:"판매", opt:"OFFSITE_CONVERSIONS", needsPixel:true, event:"PURCHASE"}
+  };
+  var OBJECTIVE_ALIASES = {
+    OUTCOME_AWARENESS:["outcome_awareness","awareness","인지도","도달","브랜드인지도"],
+    OUTCOME_TRAFFIC:["outcome_traffic","traffic","트래픽","유입"],
+    OUTCOME_ENGAGEMENT:["outcome_engagement","engagement","참여"],
+    OUTCOME_LEADS:["outcome_leads","leads","lead","잠재고객","회원가입","리드"],
+    OUTCOME_SALES:["outcome_sales","sales","판매","구매","구매최적화","전환"]
+  };
+  var KPI_TO_OBJECTIVE = {"인지도":"OUTCOME_AWARENESS","트래픽":"OUTCOME_TRAFFIC","구매 최적화":"OUTCOME_SALES","회원가입":"OUTCOME_LEADS"};
+  var KPI_EVENT = {"회원가입":"COMPLETE_REGISTRATION"};
+  var META_OPT_GOALS = ["REACH","IMPRESSIONS","LINK_CLICKS","LANDING_PAGE_VIEWS","POST_ENGAGEMENT","OFFSITE_CONVERSIONS","VALUE","LEAD_GENERATION","THRUPLAY"];
+  var META_CTAS = ["LEARN_MORE","SHOP_NOW","SIGN_UP","SUBSCRIBE","CONTACT_US","APPLY_NOW","DOWNLOAD","GET_OFFER","ORDER_NOW","BOOK_TRAVEL","NO_BUTTON"];
+  var META_EVENTS = ["PURCHASE","LEAD","COMPLETE_REGISTRATION","ADD_TO_CART","INITIATED_CHECKOUT","ADD_PAYMENT_INFO","CONTENT_VIEW","SEARCH","SUBSCRIBE","START_TRIAL"];
+  var META_COLUMNS = ["campaign_name","objective","adset_name","daily_budget","start_date","end_date","countries","age_min","age_max","gender","optimization_goal","pixel_event","ad_name","creative_name","image_url","primary_text","headline","link_url","cta"];
+  var META_LABELS = {
+    campaign_name:"캠페인명", objective:"캠페인목표", adset_name:"광고세트명", daily_budget:"일예산", start_date:"시작일", end_date:"종료일",
+    countries:"국가", age_min:"최소연령", age_max:"최대연령", gender:"성별", optimization_goal:"최적화목표", pixel_event:"전환이벤트",
+    ad_name:"광고명", creative_name:"소재명", image_url:"이미지URL", primary_text:"본문", headline:"제목", link_url:"랜딩URL", cta:"CTA"
+  };
+  /* 가정: KRW 계정 일 예산 하한. 실제 하한은 계정·최적화 목표별로 다르므로 Meta가 반려하면 그 메시지를 따른다. */
+  var META_MIN_DAILY_BUDGET = 1000;
+  var META_RATE_LIMIT_CODES = [4,17,32,613,80000,80003,80004,80014];
+  var SEP = "\u0001";
+
+  function defaultMetaConfig(){
+    return { adAccountId:"", pageId:"", pixelId:"", apiVersion:"v24.0", defaultLink:"", tzOffset:"+0900" };
+  }
+  state.metaConfig = defaultMetaConfig();
+  var metaRun = { running:false, stop:false, token:"", delay:1200, dryRun:true, done:0, total:0, log:[], result:[] };
+  var metaUI = { split:"age3", countries:"KR", chunk:5 };
+
+  function ensureMeta(m){
+    if(!m.metaBulk) m.metaBulk = { rows:[], created:{ campaigns:{}, adsets:{}, ads:{}, images:{} } };
+    if(!m.metaBulk.created) m.metaBulk.created = { campaigns:{}, adsets:{}, ads:{}, images:{} };
+    return m.metaBulk;
+  }
+  function pad2(n){ return (n<10?"0":"")+n; }
+  function ymd(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
+  function parseYmd(s){
+    var mt = /^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})$/.exec(String(s||"").trim());
+    if(!mt) return null;
+    var d = new Date(Number(mt[1]), Number(mt[2])-1, Number(mt[3]));
+    return (d.getMonth()===Number(mt[2])-1) ? d : null;
+  }
+  function normalizeObjective(v){
+    var s = String(v||"").trim().toLowerCase().replace(/\s+/g,"");
+    if(!s) return "";
+    for(var k in OBJECTIVE_ALIASES){ if(OBJECTIVE_ALIASES[k].indexOf(s)!==-1) return k; }
+    return String(v).trim().toUpperCase();
+  }
+  function normalizeGender(v){
+    var s = String(v||"").trim().toLowerCase();
+    if(["male","m","남","남성","1"].indexOf(s)!==-1) return "male";
+    if(["female","f","여","여성","2"].indexOf(s)!==-1) return "female";
+    return "all";
+  }
+  function splitList(v){ return String(v||"").split(/[,|;\/\s]+/).map(function(x){ return x.trim().toUpperCase(); }).filter(Boolean); }
+  function adsetKey(r){ return r.campaign_name+SEP+r.adset_name; }
+  function adKey(r){ return r.campaign_name+SEP+r.adset_name+SEP+r.ad_name; }
+  function findCreativeImage(m, name){
+    var key = String(name||"").trim().toLowerCase();
+    if(!key) return null;
+    for(var i=0;i<m.creatives.length;i++){
+      if(m.creatives[i].name.trim().toLowerCase()===key && m.creatives[i].image) return m.creatives[i];
+    }
+    return null;
+  }
+
+  /* ---------- CSV ---------- */
+  function metaHeaderToKey(h){
+    var s = String(h||"").replace(/^﻿/,"").trim().toLowerCase().replace(/\s+/g,"");
+    for(var i=0;i<META_COLUMNS.length;i++){
+      var k = META_COLUMNS[i];
+      if(s===k || s===META_LABELS[k].toLowerCase()) return k;
+    }
+    return null;
+  }
+  function rowsToCsv(rows){
+    var header = META_COLUMNS.map(function(k){ return META_LABELS[k]; });
+    var data = rows.map(function(r){ return META_COLUMNS.map(function(k){ return r[k]==null?"":r[k]; }); });
+    return "﻿" + Papa.unparse({ fields:header, data:data });
+  }
+  function downloadText(name, text, mime){
+    var blob = new Blob([text], {type:mime||"text/csv;charset=utf-8"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href=url; a.download=name; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  }
+  function metaTemplateRows(){
+    return [
+      { campaign_name:"202612_구매_연말세일", objective:"OUTCOME_SALES", adset_name:"25-34_여성", daily_budget:"50000", start_date:"2026-12-01", end_date:"2026-12-31", countries:"KR", age_min:"25", age_max:"34", gender:"female", optimization_goal:"OFFSITE_CONVERSIONS", pixel_event:"PURCHASE", ad_name:"연말세일_A", creative_name:"연말세일 A", image_url:"", primary_text:"연말 단 2주, 최대 40% 할인", headline:"연말 세일 오픈", link_url:"https://example.com/sale", cta:"SHOP_NOW" },
+      { campaign_name:"202612_트래픽_신상품", objective:"OUTCOME_TRAFFIC", adset_name:"전체_18-44", daily_budget:"30000", start_date:"2026-12-01", end_date:"2026-12-15", countries:"KR", age_min:"18", age_max:"44", gender:"all", optimization_goal:"LANDING_PAGE_VIEWS", pixel_event:"", ad_name:"신상품_B", creative_name:"", image_url:"https://example.com/img/b.jpg", primary_text:"새로 나온 겨울 컬렉션", headline:"신상품 보러가기", link_url:"https://example.com/new", cta:"LEARN_MORE" }
+    ];
+  }
+  function handleMetaCSV(file){
+    var m = currentMonth();
+    Papa.parse(file, {
+      header:true, skipEmptyLines:true,
+      complete:function(results){
+        var map = {};
+        (results.meta.fields||[]).forEach(function(f){ var k=metaHeaderToKey(f); if(k && !map[k]) map[k]=f; });
+        if(!map.campaign_name || !map.adset_name || !map.ad_name){
+          alert("캠페인명·광고세트명·광고명 열을 찾지 못했어요. 템플릿 CSV의 헤더를 사용해주세요.");
+          return;
+        }
+        var rows = results.data.map(function(raw){
+          var r = {};
+          META_COLUMNS.forEach(function(k){ r[k] = map[k] ? String(raw[map[k]]==null?"":raw[map[k]]).trim() : ""; });
+          return r;
+        }).filter(function(r){ return r.campaign_name || r.adset_name || r.ad_name; });
+        ensureMeta(m).rows = rows;
+        debouncedSave(); renderEditorBody();
+      }
+    });
+  }
+
+  /* ---------- 자동 생성 ---------- */
+  function autoGenerateMeta(m, year, idx){
+    var y = Number(year);
+    var kpis = [];
+    m.kpis.forEach(function(k){ var n=String(k.name||"").trim(); if(KPI_TO_OBJECTIVE[n] && kpis.indexOf(n)===-1) kpis.push(n); });
+    if(!kpis.length) kpis = ["구매 최적화"];
+    var first = new Date(y, idx, 1), last = new Date(y, idx+1, 0);
+    var today = new Date(); today.setHours(0,0,0,0);
+    var start = (today>first && today<=last) ? today : first;
+    var days = Math.round((last-start)/86400000)+1;
+    var splits = metaUI.split==="gender" ? [{n:"남성",g:"male",min:18,max:65},{n:"여성",g:"female",min:18,max:65}]
+      : metaUI.split==="none" ? [{n:"전체",g:"all",min:18,max:65}]
+      : [{n:"18-29",g:"all",min:18,max:29},{n:"30-44",g:"all",min:30,max:44},{n:"45-65",g:"all",min:45,max:65}];
+    var creatives = m.creatives.filter(function(c){ return c.image; });
+    if(!creatives.length) creatives = [{name:""}];
+    var campBudget = (m.budget||0)/kpis.length;
+    var daily = Math.floor(campBudget/days/splits.length/100)*100;
+    var ym = y+pad2(idx+1);
+    var text = String(m.agenda||"").trim().split(/\n/)[0].slice(0,125);
+    var rows = [];
+    kpis.forEach(function(kpi){
+      var obj = KPI_TO_OBJECTIVE[kpi];
+      var def = META_OBJECTIVES[obj];
+      var campName = ym+"_"+kpi.replace(/\s+/g,"")+"_"+def.label;
+      splits.forEach(function(sp){
+        creatives.forEach(function(c, ci){
+          rows.push({
+            campaign_name:campName, objective:obj, adset_name:campName+"_"+sp.n, daily_budget:String(daily),
+            start_date:ymd(start), end_date:ymd(last), countries:metaUI.countries||"KR",
+            age_min:String(sp.min), age_max:String(sp.max), gender:sp.g,
+            optimization_goal:def.opt, pixel_event:def.needsPixel ? (KPI_EVENT[kpi]||def.event) : "",
+            ad_name:campName+"_"+sp.n+"_"+(c.name?c.name.replace(/\s+/g,""):"소재"+(ci+1)),
+            creative_name:c.name||"", image_url:"", primary_text:text, headline:c.name||"",
+            link_url:state.metaConfig.defaultLink||"", cta:obj==="OUTCOME_LEADS"?"SIGN_UP":(obj==="OUTCOME_SALES"?"SHOP_NOW":"LEARN_MORE")
+          });
+        });
+      });
+    });
+    ensureMeta(m).rows = rows;
+  }
+
+  /* ---------- 검증 + 트리 ---------- */
+  function validateMeta(m){
+    var rows = ensureMeta(m).rows;
+    var cfg = state.metaConfig;
+    var errors = [], warnings = [], rowErr = {};
+    function err(i,msg){ errors.push({row:i,msg:msg}); rowErr[i]=true; }
+    function warn(i,msg){ warnings.push({row:i,msg:msg}); }
+    var campaigns = [], campMap = {}, adNames = {};
+    var needsPixel = false;
+
+    rows.forEach(function(r, i){
+      var n = i+1;
+      if(!r.campaign_name) err(n,"캠페인명이 비어 있어요");
+      if(!r.adset_name) err(n,"광고세트명이 비어 있어요");
+      if(!r.ad_name) err(n,"광고명이 비어 있어요");
+      var obj = normalizeObjective(r.objective);
+      if(!META_OBJECTIVES[obj]) err(n,"캠페인목표 '"+r.objective+"'를 인식하지 못했어요 (OUTCOME_SALES 등)");
+      var def = META_OBJECTIVES[obj] || {};
+      if(def.needsPixel) needsPixel = true;
+      var budget = parseNum(r.daily_budget);
+      if(budget==null || budget<=0) err(n,"일예산이 0이거나 비어 있어요");
+      else if(budget<META_MIN_DAILY_BUDGET) warn(n,"일예산 "+budget+"원은 Meta 최소 예산보다 낮을 수 있어요");
+      var sd = parseYmd(r.start_date), ed = parseYmd(r.end_date);
+      if(!sd) err(n,"시작일 형식 오류 (YYYY-MM-DD)");
+      if(!ed) err(n,"종료일 형식 오류 (YYYY-MM-DD)");
+      if(sd && ed && ed<sd) err(n,"종료일이 시작일보다 빨라요");
+      var today = new Date(); today.setHours(0,0,0,0);
+      if(ed && ed<today) err(n,"종료일이 이미 지났어요");
+      var countries = splitList(r.countries);
+      if(!countries.length) err(n,"국가 코드가 비어 있어요 (예: KR)");
+      else if(countries.some(function(c){ return !/^[A-Z]{2}$/.test(c); })) err(n,"국가 코드는 2자리 영문이어야 해요 (예: KR, JP)");
+      var amin = parseNum(r.age_min)||18, amax = parseNum(r.age_max)||65;
+      if(amin<13 || amax>65 || amin>amax) err(n,"연령 범위 오류 (13~65, 최소≤최대)");
+      var opt = String(r.optimization_goal||def.opt||"").trim().toUpperCase();
+      if(opt && META_OPT_GOALS.indexOf(opt)===-1) warn(n,"최적화목표 '"+opt+"'는 목록에 없는 값이에요");
+      var ev = String(r.pixel_event||def.event||"").trim().toUpperCase();
+      if(opt==="OFFSITE_CONVERSIONS" && META_EVENTS.indexOf(ev)===-1) err(n,"전환 최적화에는 전환이벤트(PURCHASE 등)가 필요해요");
+      if(opt==="OFFSITE_CONVERSIONS") needsPixel = true;
+      if(!/^https?:\/\//i.test(r.link_url||"")) err(n,"랜딩URL은 http(s)://로 시작해야 해요");
+      if(!r.primary_text) err(n,"본문(primary text)이 비어 있어요");
+      var cta = String(r.cta||"LEARN_MORE").trim().toUpperCase();
+      if(META_CTAS.indexOf(cta)===-1) warn(n,"CTA '"+cta+"'는 목록에 없는 값이에요");
+      var img = findCreativeImage(m, r.creative_name);
+      if(!img && !/^https?:\/\//i.test(r.image_url||"")) err(n,"이미지가 없어요: 광고 소재 탭 이미지명과 소재명을 맞추거나 이미지URL을 넣어주세요");
+      var ak = adKey(r);
+      if(adNames[ak]) warn(n,"같은 광고세트 안에 같은 광고명이 있어요 ("+adNames[ak]+"행)"); else adNames[ak]=n;
+
+      if(!r.campaign_name || !r.adset_name) return;
+      var c = campMap[r.campaign_name];
+      if(!c){
+        c = { name:r.campaign_name, objective:obj, adsets:[], adsetMap:{} };
+        campMap[r.campaign_name] = c; campaigns.push(c);
+      } else if(c.objective!==obj){
+        err(n,"같은 캠페인 안에서 캠페인목표가 달라요");
+      }
+      var s = c.adsetMap[r.adset_name];
+      var adsetSpec = {
+        name:r.adset_name, daily_budget:budget||0, start_date:r.start_date, end_date:r.end_date,
+        countries:countries, age_min:amin, age_max:amax, gender:normalizeGender(r.gender),
+        optimization_goal:opt, pixel_event:opt==="OFFSITE_CONVERSIONS"?ev:"", ads:[], key:adsetKey(r)
+      };
+      if(!s){
+        s = adsetSpec; c.adsetMap[r.adset_name] = s; c.adsets.push(s);
+      } else if(s.daily_budget!==adsetSpec.daily_budget || s.start_date!==adsetSpec.start_date || s.end_date!==adsetSpec.end_date || s.age_min!==amin || s.age_max!==amax || s.gender!==adsetSpec.gender){
+        warn(n,"같은 광고세트 행끼리 예산·기간·타겟이 달라요. 첫 행 값으로 생성돼요");
+      }
+      s.ads.push({ row:n, name:r.ad_name, key:ak, creative_name:r.creative_name, image_url:img?"":(r.image_url||""),
+        image:img?img.image:null, primary_text:r.primary_text, headline:r.headline, link_url:r.link_url, cta:cta });
+    });
+
+    if(needsPixel && !/^\d+$/.test(cfg.pixelId||"")) errors.unshift({row:0,msg:"전환 최적화 캠페인이 있어 픽셀 ID가 필요해요"});
+
+    var adsetCount=0, adCount=0, dailySum=0, plannedSpend=0;
+    campaigns.forEach(function(c){
+      c.adsets.forEach(function(s){
+        adsetCount++; adCount += s.ads.length; dailySum += s.daily_budget;
+        var sd=parseYmd(s.start_date), ed=parseYmd(s.end_date);
+        if(sd && ed) plannedSpend += s.daily_budget*(Math.round((ed-sd)/86400000)+1);
+      });
+    });
+    return { errors:errors, warnings:warnings, rowErr:rowErr, campaigns:campaigns,
+      totals:{ campaigns:campaigns.length, adsets:adsetCount, ads:adCount, dailySum:dailySum, plannedSpend:plannedSpend } };
+  }
+
+  /* ---------- MCP 작업 지시서 ---------- */
+  function buildMetaJob(m, v){
+    var cfg = state.metaConfig;
+    return {
+      schema:"masterplan.meta-bulk/v1",
+      generated_at:new Date().toISOString(),
+      period:editorState.year+"-"+pad2(editorState.monthIdx+1),
+      account:{ ad_account_id:"act_"+String(cfg.adAccountId||"").replace(/^act_/,""), page_id:cfg.pageId, pixel_id:cfg.pixelId||null },
+      api_version:cfg.apiVersion,
+      rules:{ status:"PAUSED", special_ad_categories:[], buying_type:"AUCTION", is_adset_budget_sharing_enabled:false,
+        bid_strategy:"LOWEST_COST_WITHOUT_CAP", billing_event:"IMPRESSIONS", advantage_audience:0,
+        budget_unit:"광고계정 통화 기준 일 예산(KRW 계정은 원 단위 정수)", timezone_offset:cfg.tzOffset },
+      totals:v.totals,
+      campaigns:v.campaigns.map(function(c){
+        return { name:c.name, objective:c.objective, adsets:c.adsets.map(function(s){
+          return { name:s.name, daily_budget:s.daily_budget, start_time:s.start_date+"T00:00:00"+cfg.tzOffset, end_time:s.end_date+"T23:59:59"+cfg.tzOffset,
+            optimization_goal:s.optimization_goal,
+            promoted_object:s.pixel_event?{ pixel_id:cfg.pixelId, custom_event_type:s.pixel_event }:null,
+            targeting:metaTargeting(s),
+            ads:s.ads.map(function(a){
+              return { name:a.name, creative:{ primary_text:a.primary_text, headline:a.headline, link:a.link_url, call_to_action:a.cta,
+                image_url:a.image_url||null, image_source:a.image?("마스터플랜 광고 소재 탭 이미지: "+a.creative_name):null } };
+            }) };
+        }) };
+      })
+    };
+  }
+  function metaJobPrompt(job){
+    var chunk = Math.max(1, Number(metaUI.chunk)||5);
+    return [
+      "아래 JSON은 마케팅 마스터플랜에서 만든 Meta 광고 대용량 셋팅 작업 지시서야. 연결된 Meta Ads MCP 도구로 다음 규칙대로 생성해줘.",
+      "",
+      "1. 시작 전에 광고계정("+job.account.ad_account_id+"), 페이지("+job.account.page_id+")"+(job.account.pixel_id?", 픽셀("+job.account.pixel_id+")":"")+"에 접근 가능한지 확인하고, 같은 이름의 캠페인이 이미 있으면 새로 만들지 말고 알려줘.",
+      "2. 모든 캠페인·광고세트·광고는 status=PAUSED로 만들어. 활성화는 사람이 검수한 뒤 직접 해.",
+      "3. 순서는 캠페인 → 광고세트 → 이미지·크리에이티브 → 광고. 캠페인 "+chunk+"개 단위로 진행하고, 단위마다 생성된 ID 표(level, name, id, parent_id)를 보여줘.",
+      "4. rules에 있는 값(special_ad_categories, is_adset_budget_sharing_enabled, bid_strategy, billing_event, advantage_audience)을 그대로 써.",
+      "5. image_url이 있으면 그 이미지를 쓰고, image_source만 있는 광고는 광고계정 미디어 라이브러리에서 같은 이름의 이미지를 찾아 써. 못 찾으면 그 광고만 보류하고 목록에 남겨줘.",
+      "6. 오류가 나면 다음 항목으로 넘어가지 말고 멈춘 뒤 오류 메시지, 추정 원인, 수정안을 알려줘. 레이트 리밋 오류는 잠시 기다렸다가 재시도해.",
+      "7. 끝나면 전체 name→ID 매핑을 CSV(level,name,id,parent_id)로 정리해줘.",
+      "",
+      "```json",
+      JSON.stringify(job, null, 2),
+      "```"
+    ].join("\n");
+  }
+  function copyText(text, fallbackEl){
+    function fallback(){
+      if(!fallbackEl) return;
+      fallbackEl.value = text; fallbackEl.select();
+      try{ document.execCommand("copy"); }catch(e){}
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){ metaToast("작업 지시서를 복사했어요. Meta Ads MCP가 연결된 Claude에 붙여넣으세요."); }, fallback);
+    } else fallback();
+  }
+  function metaToast(msg){
+    var el = document.getElementById("metaToast");
+    if(!el) return;
+    el.textContent = msg; el.hidden = false;
+    clearTimeout(metaToast._t); metaToast._t = setTimeout(function(){ el.hidden = true; }, 4000);
+  }
+
+  /* ---------- Marketing API 직접 실행 ---------- */
+  function metaTargeting(s){
+    var t = { geo_locations:{ countries:s.countries }, age_min:s.age_min, age_max:s.age_max, targeting_automation:{ advantage_audience:0 } };
+    if(s.gender==="male") t.genders=[1];
+    else if(s.gender==="female") t.genders=[2];
+    return t;
+  }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  function metaLog(msg, kind){
+    var line = "["+new Date().toLocaleTimeString("ko-KR")+"] "+msg;
+    metaRun.log.push({ text:line, kind:kind||"" });
+    if(metaRun.log.length>2000) metaRun.log.shift();
+    var el = document.getElementById("metaLog");
+    if(el){
+      var div = document.createElement("div");
+      div.className = "log-line"+(kind?" is-"+kind:"");
+      div.textContent = line;
+      el.appendChild(div); el.scrollTop = el.scrollHeight;
+    }
+  }
+  function metaProgress(){
+    var bar = document.getElementById("metaProgressFill"), txt = document.getElementById("metaProgressText");
+    var pct = metaRun.total ? Math.round(metaRun.done/metaRun.total*100) : 0;
+    if(bar) bar.style.width = pct+"%";
+    if(txt) txt.textContent = metaRun.done+" / "+metaRun.total+" ("+pct+"%)";
+  }
+  async function graphPost(path, params){
+    var cfg = state.metaConfig;
+    if(metaRun.dryRun){
+      metaLog("[DRY-RUN] POST /"+path+" "+JSON.stringify(params).slice(0,300), "dry");
+      return { id:"dry_"+Math.random().toString(36).slice(2,8), images:{ bytes:{ hash:"dry_hash" } } };
+    }
+    var body = new URLSearchParams();
+    Object.keys(params).forEach(function(k){
+      var v = params[k];
+      if(v==null) return;
+      body.append(k, typeof v==="object" ? JSON.stringify(v) : String(v));
+    });
+    body.append("access_token", metaRun.token);
+    for(var attempt=0; attempt<4; attempt++){
+      var res = await fetch("https://graph.facebook.com/"+encodeURIComponent(cfg.apiVersion)+"/"+path, { method:"POST", body:body });
+      var j = await res.json().catch(function(){ return { error:{ message:"응답을 해석하지 못했어요 (HTTP "+res.status+")" } }; });
+      if(!j.error) return j;
+      if(META_RATE_LIMIT_CODES.indexOf(j.error.code)!==-1 && attempt<3){
+        var wait = 30000*Math.pow(2, attempt);
+        metaLog("레이트 리밋(code "+j.error.code+") — "+(wait/1000)+"초 후 재시도", "warn");
+        await sleep(wait);
+        if(metaRun.stop) break;
+        continue;
+      }
+      var e = new Error((j.error.error_user_title?j.error.error_user_title+": ":"")+(j.error.error_user_msg||j.error.message)+" (code "+j.error.code+(j.error.error_subcode?"/"+j.error.error_subcode:"")+")");
+      throw e;
+    }
+    throw new Error("재시도 한도를 넘었거나 중지됐어요");
+  }
+  async function runMetaBulk(m){
+    var cfg = state.metaConfig;
+    var v = validateMeta(m);
+    var act = "act_"+String(cfg.adAccountId||"").replace(/^act_/,"");
+    if(!/^act_\d+$/.test(act) || !/^\d+$/.test(cfg.pageId||"")){ alert("광고계정 ID와 페이지 ID(숫자)를 먼저 입력해주세요."); return; }
+    if(v.errors.length){ alert("검증 오류 "+v.errors.length+"건을 먼저 해결해주세요."); return; }
+    if(!metaRun.dryRun && !metaRun.token){ alert("액세스 토큰을 입력해주세요."); return; }
+    if(!metaRun.dryRun && !confirm("실제로 "+v.totals.campaigns+"개 캠페인, "+v.totals.adsets+"개 광고세트, "+v.totals.ads+"개 광고를 PAUSED 상태로 생성할까요?")) return;
+
+    var created = ensureMeta(m).created;
+    metaRun.running = true; metaRun.stop = false; metaRun.done = 0; metaRun.result = [];
+    metaRun.total = v.totals.campaigns + v.totals.adsets + v.totals.ads;
+    renderEditorBody();
+    metaLog((metaRun.dryRun?"[DRY-RUN] ":"")+"시작: "+act+" / API "+cfg.apiVersion);
+
+    function rec(level, name, id, parent, skipped){
+      metaRun.result.push({ level:level, name:name, id:id, parent_id:parent||"", status:skipped?"기존(건너뜀)":"생성" });
+    }
+    async function step(){ metaRun.done++; metaProgress(); if(!metaRun.dryRun) debouncedSave(); await sleep(metaRun.dryRun?0:metaRun.delay); }
+
+    try{
+      for(var ci=0; ci<v.campaigns.length; ci++){
+        var c = v.campaigns[ci];
+        if(metaRun.stop) throw new Error("사용자가 중지했어요");
+        var campId = created.campaigns[c.name];
+        if(campId && !metaRun.dryRun){ rec("campaign", c.name, campId, act, true); metaLog("캠페인 건너뜀(이미 생성): "+c.name); }
+        else {
+          var cj = await graphPost(act+"/campaigns", { name:c.name, objective:c.objective, status:"PAUSED", buying_type:"AUCTION",
+            special_ad_categories:[], is_adset_budget_sharing_enabled:false });
+          campId = cj.id; if(!metaRun.dryRun) created.campaigns[c.name] = campId;
+          rec("campaign", c.name, campId, act); metaLog("캠페인 생성: "+c.name+" → "+campId, "ok");
+        }
+        await step();
+
+        for(var si=0; si<c.adsets.length; si++){
+          var s = c.adsets[si];
+          if(metaRun.stop) throw new Error("사용자가 중지했어요");
+          var setId = created.adsets[s.key];
+          if(setId && !metaRun.dryRun){ rec("adset", s.name, setId, campId, true); metaLog("광고세트 건너뜀(이미 생성): "+s.name); }
+          else {
+            var sp = { name:s.name, campaign_id:campId, status:"PAUSED", daily_budget:Math.round(s.daily_budget),
+              billing_event:"IMPRESSIONS", optimization_goal:s.optimization_goal || META_OBJECTIVES[c.objective].opt,
+              bid_strategy:"LOWEST_COST_WITHOUT_CAP", targeting:metaTargeting(s),
+              start_time:s.start_date+"T00:00:00"+cfg.tzOffset, end_time:s.end_date+"T23:59:59"+cfg.tzOffset };
+            if(s.pixel_event) sp.promoted_object = { pixel_id:cfg.pixelId, custom_event_type:s.pixel_event };
+            var sj = await graphPost(act+"/adsets", sp);
+            setId = sj.id; if(!metaRun.dryRun) created.adsets[s.key] = setId;
+            rec("adset", s.name, setId, campId); metaLog("광고세트 생성: "+s.name+" → "+setId, "ok");
+          }
+          await step();
+
+          for(var ai=0; ai<s.ads.length; ai++){
+            var a = s.ads[ai];
+            if(metaRun.stop) throw new Error("사용자가 중지했어요");
+            var adId = created.ads[a.key];
+            if(adId && !metaRun.dryRun){ rec("ad", a.name, adId, setId, true); metaLog("광고 건너뜀(이미 생성): "+a.name); await step(); continue; }
+            var linkData = { link:a.link_url, message:a.primary_text, name:a.headline||undefined,
+              call_to_action:{ type:a.cta, value:{ link:a.link_url } } };
+            if(a.cta==="NO_BUTTON") delete linkData.call_to_action;
+            if(a.image){
+              var imgKey = a.creative_name.trim().toLowerCase();
+              var hash = created.images[imgKey];
+              if(!hash || metaRun.dryRun){
+                var ij = await graphPost(act+"/adimages", metaRun.dryRun ? { bytes:"(base64 "+Math.round(a.image.length/1024)+"KB)" } : { bytes:a.image.split(",")[1] });
+                var first = ij.images ? ij.images[Object.keys(ij.images)[0]] : null;
+                hash = first && first.hash;
+                if(!hash) throw new Error("이미지 업로드 응답에 hash가 없어요: "+a.creative_name);
+                if(!metaRun.dryRun) created.images[imgKey] = hash;
+                metaLog("이미지 업로드: "+a.creative_name+" → "+hash, "ok");
+              }
+              linkData.image_hash = hash;
+            } else {
+              linkData.picture = a.image_url;
+            }
+            var crj = await graphPost(act+"/adcreatives", { name:a.name+"_creative", object_story_spec:{ page_id:cfg.pageId, link_data:linkData } });
+            var adj = await graphPost(act+"/ads", { name:a.name, adset_id:setId, creative:{ creative_id:crj.id }, status:"PAUSED" });
+            if(!metaRun.dryRun) created.ads[a.key] = adj.id;
+            rec("ad", a.name, adj.id, setId); metaLog("광고 생성: "+a.name+" → "+adj.id, "ok");
+            await step();
+          }
+        }
+      }
+      metaLog((metaRun.dryRun?"[DRY-RUN] ":"")+"완료: "+metaRun.done+"개 항목 처리", "ok");
+    }catch(e){
+      metaLog("중단: "+e.message, "err");
+      metaLog("같은 시트로 다시 실행하면 이미 생성된 항목은 건너뛰고 이어서 진행해요.", "warn");
+    }finally{
+      metaRun.running = false;
+      idbSaveNow();
+      if(editorState.tab==="meta" && !document.getElementById("editorOverlay").hidden && currentMonth()===m) renderEditorBody();
+    }
+  }
+
+  /* ---------- 렌더링 ---------- */
+  function metaTabHTML(m){
+    var mb = ensureMeta(m);
+    var cfg = state.metaConfig;
+    var v = validateMeta(m);
+    var created = mb.created;
+    var createdCount = Object.keys(created.campaigns).length + Object.keys(created.adsets).length + Object.keys(created.ads).length;
+    var budgetPct = m.budget>0 ? (v.totals.plannedSpend/m.budget*100) : null;
+
+    function cfgField(key, label, ph){
+      return '<label class="field"><span>'+label+'</span><input type="text" data-role="meta-cfg" data-key="'+key+'" placeholder="'+ph+'" value="'+escapeHTML(cfg[key])+'"></label>';
+    }
+    var cfgHTML =
+      '<div class="meta-section">' +
+        '<h4 class="section-title">1. 광고계정 연결 정보</h4>' +
+        '<p class="section-sub">모든 월에 공통으로 저장돼요. 액세스 토큰은 저장하지 않아요.</p>' +
+        '<div class="field-row">'+cfgField("adAccountId","광고계정 ID","act_ 뒤 숫자")+cfgField("pageId","페이스북 페이지 ID","숫자")+cfgField("pixelId","픽셀(데이터세트) ID","전환 캠페인 시 필수")+'</div>' +
+        '<div class="field-row">'+cfgField("defaultLink","기본 랜딩 URL","https://")+cfgField("apiVersion","Graph API 버전","v24.0")+cfgField("tzOffset","시간대 오프셋","+0900")+'</div>' +
+      '</div>';
+
+    var splitOpts = [["age3","연령 3구간 (18-29/30-44/45-65)"],["gender","성별 (남/여)"],["none","분할 없음"]].map(function(o){
+      return '<option value="'+o[0]+'"'+(metaUI.split===o[0]?" selected":"")+'>'+o[1]+'</option>';
+    }).join("");
+    var sheetHTML =
+      '<div class="meta-section">' +
+        '<h4 class="section-title">2. 셋팅 시트 ('+mb.rows.length+'행)</h4>' +
+        '<p class="section-sub">한 행이 광고 1개예요. 캠페인명·광고세트명이 같은 행끼리 묶여서 생성돼요.</p>' +
+        '<div class="controls-row" style="margin-top:0">' +
+          '<div class="field-inline">광고세트 분할 <select data-role="meta-ui" data-key="split">'+splitOpts+'</select></div>' +
+          '<div class="field-inline">국가 <input type="text" data-role="meta-ui" data-key="countries" value="'+escapeHTML(metaUI.countries)+'" style="width:90px;padding:6px 10px"></div>' +
+          '<button type="button" class="btn btn-sm btn-primary" data-role="meta-autogen">이번 달 KPI·예산·소재로 자동 생성</button>' +
+        '</div>' +
+        '<div class="controls-row">' +
+          '<button type="button" class="btn btn-sm" data-role="meta-template">템플릿 CSV 받기</button>' +
+          '<button type="button" class="btn btn-sm" data-role="meta-export-sheet"'+(mb.rows.length?"":" disabled")+'>현재 시트 CSV 받기 (엑셀 편집용)</button>' +
+          '<button type="button" class="btn btn-sm btn-danger" data-role="meta-clear"'+(mb.rows.length?"":" disabled")+'>시트 비우기</button>' +
+        '</div>' +
+        '<label class="dropzone" id="metaCsvDropzone" style="margin-top:12px">' +
+          '<div class="dz-title">셋팅 시트 업로드 (CSV)</div>' +
+          '<div class="dz-sub">템플릿 헤더(한글 또는 영문 키)를 인식해요 · 업로드하면 현재 시트를 대체해요</div>' +
+          '<input type="file" id="metaCsvInput" accept=".csv">' +
+        '</label>' +
+      '</div>';
+
+    var issues = v.errors.slice(0,40).map(function(x){ return '<li class="is-err">'+(x.row?x.row+'행: ':'')+escapeHTML(x.msg)+'</li>'; }).join("") +
+      v.warnings.slice(0,20).map(function(x){ return '<li class="is-warn">'+(x.row?x.row+'행: ':'')+escapeHTML(x.msg)+'</li>'; }).join("");
+    var more = (v.errors.length>40?'<li class="is-err">…오류 '+(v.errors.length-40)+'건 더 있음</li>':'') + (v.warnings.length>20?'<li class="is-warn">…경고 '+(v.warnings.length-20)+'건 더 있음</li>':'');
+    var previewRows = mb.rows.slice(0,100).map(function(r,i){
+      var done = created.ads[adKey(r)];
+      var status = v.rowErr[i+1] ? '<span class="tag tag-err">오류</span>' : (done ? '<span class="tag tag-ok" title="'+escapeHTML(done)+'">생성됨</span>' : '<span class="tag">대기</span>');
+      return '<tr><td class="num">'+(i+1)+'</td><td>'+status+'</td><td>'+escapeHTML(r.campaign_name)+'</td><td>'+escapeHTML((META_OBJECTIVES[normalizeObjective(r.objective)]||{label:r.objective}).label)+'</td>' +
+        '<td>'+escapeHTML(r.adset_name)+'</td><td class="num">'+formatWon(parseNum(r.daily_budget)||0)+'</td><td>'+escapeHTML(r.start_date)+' ~ '+escapeHTML(r.end_date)+'</td>' +
+        '<td>'+escapeHTML(r.countries)+' · '+escapeHTML(r.age_min||"18")+'-'+escapeHTML(r.age_max||"65")+' · '+escapeHTML(normalizeGender(r.gender))+'</td>' +
+        '<td>'+escapeHTML(r.ad_name)+'</td><td>'+escapeHTML(r.creative_name||r.image_url||"-")+'</td></tr>';
+    }).join("");
+    var validHTML = !mb.rows.length ? '' :
+      '<div class="meta-section">' +
+        '<h4 class="section-title">3. 검증 결과</h4>' +
+        '<div class="stat-grid">' +
+          '<div class="stat-cell"><div class="label">캠페인</div><div class="value">'+v.totals.campaigns+'개</div></div>' +
+          '<div class="stat-cell"><div class="label">광고세트</div><div class="value">'+v.totals.adsets+'개</div></div>' +
+          '<div class="stat-cell"><div class="label">광고</div><div class="value">'+v.totals.ads+'개</div></div>' +
+          '<div class="stat-cell"><div class="label">오류 / 경고</div><div class="value" style="color:'+(v.errors.length?"var(--red)":"var(--green)")+'">'+v.errors.length+' / '+v.warnings.length+'</div></div>' +
+          '<div class="stat-cell"><div class="label">일 예산 합계</div><div class="value">'+formatWon(v.totals.dailySum)+'</div></div>' +
+          '<div class="stat-cell"><div class="label">기간 최대 집행액</div><div class="value">'+formatWon(v.totals.plannedSpend)+'</div></div>' +
+          '<div class="stat-cell"><div class="label">월 예산</div><div class="value">'+formatWon(m.budget)+'</div></div>' +
+          '<div class="stat-cell"><div class="label">월 예산 대비</div><div class="value" style="color:'+(budgetPct>100?"var(--red)":"inherit")+'">'+formatMetric(budgetPct,"%")+'</div></div>' +
+        '</div>' +
+        (issues ? '<ul class="issue-list">'+issues+more+'</ul>' : '<p class="ok-note">✓ 오류 없음 — 실행할 수 있어요.</p>') +
+        '<div class="media-table-wrap" style="margin-top:12px"><table><thead><tr><th class="num">#</th><th>상태</th><th>캠페인</th><th>목표</th><th>광고세트</th><th class="num">일예산</th><th>기간</th><th>타겟</th><th>광고</th><th>소재</th></tr></thead>' +
+        '<tbody>'+previewRows+'</tbody></table></div>' +
+        (mb.rows.length>100?'<p class="section-sub" style="margin-top:8px">미리보기는 앞 100행만 보여줘요. 검증·실행은 전체 '+mb.rows.length+'행에 적용돼요.</p>':'') +
+      '</div>';
+
+    var canRun = mb.rows.length && !v.errors.length;
+    var pct = metaRun.total ? Math.round(metaRun.done/metaRun.total*100) : 0;
+    var logHTML = metaRun.log.slice(-300).map(function(l){ return '<div class="log-line'+(l.kind?" is-"+l.kind:"")+'">'+escapeHTML(l.text)+'</div>'; }).join("");
+    var runHTML = !mb.rows.length ? '' :
+      '<div class="meta-section">' +
+        '<h4 class="section-title">4. 실행</h4>' +
+        '<p class="section-sub">어느 방식이든 캠페인·광고세트·광고는 모두 PAUSED(일시중지) 상태로 생성돼요. Ads Manager에서 검수한 뒤 직접 켜주세요.</p>' +
+        '<div class="meta-run-grid">' +
+          '<div class="meta-card">' +
+            '<div class="meta-card-title">A. Meta Ads MCP로 실행 <span class="tag tag-ok">권장</span></div>' +
+            '<p class="meta-card-desc">Claude(Claude Code·claude.ai)에 Meta 공식 Ads MCP를 연결한 뒤, 작업 지시서를 붙여넣으면 Claude가 MCP 도구로 생성하고 ID를 보고해요. 토큰을 이 페이지에 넣지 않아도 돼요.</p>' +
+            '<div class="controls-row" style="margin-top:0"><div class="field-inline">보고 단위 캠페인 <input type="number" min="1" data-role="meta-ui" data-key="chunk" value="'+metaUI.chunk+'" style="width:64px;padding:6px 10px">개</div></div>' +
+            '<div class="controls-row">' +
+              '<button type="button" class="btn btn-sm btn-primary" data-role="meta-copy-job"'+(canRun?"":" disabled")+'>작업 지시서 복사</button>' +
+              '<button type="button" class="btn btn-sm" data-role="meta-download-job"'+(canRun?"":" disabled")+'>JSON 받기</button>' +
+            '</div>' +
+            '<textarea id="metaJobText" rows="4" readonly placeholder="복사가 막힌 환경이면 여기에 지시서가 표시돼요" style="margin-top:10px;font-size:11px"></textarea>' +
+          '</div>' +
+          '<div class="meta-card">' +
+            '<div class="meta-card-title">B. Marketing API 직접 실행</div>' +
+            '<p class="meta-card-desc">ads_management 권한이 있는 액세스 토큰으로 이 브라우저에서 바로 생성해요. 먼저 DRY-RUN으로 호출 내용을 확인하세요.</p>' +
+            '<label class="field" style="margin-bottom:10px"><span>액세스 토큰 (저장 안 됨)</span><input type="password" autocomplete="off" data-role="meta-token" value="'+escapeHTML(metaRun.token)+'" placeholder="EAAB…"></label>' +
+            '<div class="controls-row" style="margin-top:0">' +
+              '<div class="field-inline">호출 간격 <input type="number" min="200" step="100" data-role="meta-delay" value="'+metaRun.delay+'" style="width:80px;padding:6px 10px">ms</div>' +
+              '<label class="field-inline"><input type="checkbox" data-role="meta-dry"'+(metaRun.dryRun?" checked":"")+'> DRY-RUN (호출 안 함)</label>' +
+            '</div>' +
+            '<div class="controls-row">' +
+              (metaRun.running
+                ? '<button type="button" class="btn btn-sm btn-danger" data-role="meta-stop">중지</button>'
+                : '<button type="button" class="btn btn-sm btn-primary" data-role="meta-run"'+(canRun?"":" disabled")+'>'+(metaRun.dryRun?"DRY-RUN 실행":"생성 실행")+'</button>') +
+              '<button type="button" class="btn btn-sm" data-role="meta-download-result"'+(metaRun.result.length?"":" disabled")+'>결과 CSV</button>' +
+              '<button type="button" class="btn btn-sm" data-role="meta-reset-created"'+(createdCount&&!metaRun.running?"":" disabled")+'>생성 기록 초기화 ('+createdCount+')</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="progress-row"><div class="progress-track"><div class="progress-fill" id="metaProgressFill" style="width:'+pct+'%"></div></div><span id="metaProgressText">'+metaRun.done+' / '+metaRun.total+' ('+pct+'%)</span></div>' +
+        '<div class="meta-log" id="metaLog">'+logHTML+'</div>' +
+      '</div>';
+
+    return '<div class="meta-toast" id="metaToast" hidden></div>' + cfgHTML + sheetHTML + validHTML + runHTML;
+  }
+
+  /* ---------- 이벤트 ---------- */
+  var editorOverlayEl = document.getElementById("editorOverlay");
+  editorOverlayEl.addEventListener("click", function(e){
+    var btn = e.target.closest('[data-role^="meta-"]');
+    if(!btn || btn.tagName==="INPUT" || btn.tagName==="SELECT") return;
+    var role = btn.dataset.role;
+    var m = currentMonth(); var mb = ensureMeta(m);
+    if(role==="meta-autogen"){
+      if(mb.rows.length && !confirm("현재 시트 "+mb.rows.length+"행을 자동 생성 결과로 바꿀까요?")) return;
+      autoGenerateMeta(m, editorState.year, editorState.monthIdx);
+      debouncedSave(); renderEditorBody(); return;
+    }
+    if(role==="meta-template"){ downloadText("meta_bulk_template.csv", rowsToCsv(metaTemplateRows())); return; }
+    if(role==="meta-export-sheet"){ downloadText("meta_bulk_"+editorState.year+pad2(editorState.monthIdx+1)+".csv", rowsToCsv(mb.rows)); return; }
+    if(role==="meta-clear"){ if(confirm("셋팅 시트를 비울까요?")){ mb.rows = []; debouncedSave(); renderEditorBody(); } return; }
+    if(role==="meta-copy-job" || role==="meta-download-job"){
+      var v = validateMeta(m);
+      if(!state.metaConfig.adAccountId || !state.metaConfig.pageId){ alert("광고계정 ID와 페이지 ID를 먼저 입력해주세요."); return; }
+      var job = buildMetaJob(m, v);
+      if(role==="meta-download-job"){ downloadText("meta_bulk_job_"+job.period+".json", JSON.stringify(job,null,2), "application/json"); return; }
+      var prompt = metaJobPrompt(job);
+      var ta = document.getElementById("metaJobText"); if(ta) ta.value = prompt;
+      copyText(prompt, ta); return;
+    }
+    if(role==="meta-run"){ runMetaBulk(m); return; }
+    if(role==="meta-stop"){ metaRun.stop = true; metaLog("중지 요청 — 진행 중인 호출이 끝나면 멈춰요", "warn"); return; }
+    if(role==="meta-download-result"){
+      var csv = "﻿"+Papa.unparse(metaRun.result);
+      downloadText("meta_bulk_result_"+editorState.year+pad2(editorState.monthIdx+1)+".csv", csv); return;
+    }
+    if(role==="meta-reset-created"){
+      if(confirm("생성 기록을 지우면 다음 실행 때 같은 이름으로 다시 생성돼요(중복 위험). 지울까요?")){
+        mb.created = { campaigns:{}, adsets:{}, ads:{}, images:{} }; idbSaveNow(); renderEditorBody();
+      }
+      return;
+    }
+  });
+  editorOverlayEl.addEventListener("input", function(e){
+    var t = e.target, role = t.dataset && t.dataset.role;
+    if(role==="meta-token"){ metaRun.token = t.value.trim(); }
+    else if(role==="meta-delay"){ metaRun.delay = Math.max(200, parseNum(t.value)||1200); }
+    else if(role==="meta-cfg"){ state.metaConfig[t.dataset.key] = t.value.trim(); debouncedSave(); }
+  });
+  editorOverlayEl.addEventListener("change", function(e){
+    var t = e.target, role = t.dataset && t.dataset.role;
+    if(t.id==="metaCsvInput"){ if(t.files[0]) handleMetaCSV(t.files[0]); t.value=""; return; }
+    if(role==="meta-cfg"){ idbSaveNow(); renderEditorBody(); return; }
+    if(role==="meta-ui"){ metaUI[t.dataset.key] = t.dataset.key==="chunk" ? Math.max(1, parseNum(t.value)||5) : t.value.trim(); return; }
+    if(role==="meta-dry"){ metaRun.dryRun = t.checked; renderEditorBody(); return; }
+  });
+  editorOverlayEl.addEventListener("dragover", function(e){
+    var dz = e.target.closest("#metaCsvDropzone");
+    if(dz){ e.preventDefault(); dz.classList.add("is-drag"); }
+  });
+  editorOverlayEl.addEventListener("drop", function(e){
+    var dz = e.target.closest("#metaCsvDropzone");
+    if(dz && e.dataTransfer.files[0]) handleMetaCSV(e.dataTransfer.files[0]);
+  });
+
   /* ============================= init ============================= */
   idbLoad().then(function(saved){
     if(saved && saved.years && saved.order && saved.order.length){
       state.years = saved.years; state.order = saved.order; state.currentYear = saved.order[0];
+      if(saved.metaConfig) state.metaConfig = Object.assign(defaultMetaConfig(), saved.metaConfig);
     } else {
       var y = String(new Date().getFullYear());
       state.years[y] = emptyYear(); state.order = [y]; state.currentYear = y;
